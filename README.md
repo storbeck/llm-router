@@ -1,6 +1,6 @@
 # LLM Router
 
-Simple LLM Router in using Spring AI
+Simple LLM Router using Spring AI
 
 ## Start
 ```
