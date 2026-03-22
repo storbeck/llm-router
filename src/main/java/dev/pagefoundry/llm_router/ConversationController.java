@@ -21,7 +21,7 @@ public class ConversationController {
     }
 
     @GetMapping("/api/conversations/{conversationId}/messages")
-    public List<String> getMessages(@PathVariable String conversationId) {
+    public List<ConversationMessageDto> getMessages(@PathVariable String conversationId) {
         return conversationService.getMessages(conversationId);
     }
 }

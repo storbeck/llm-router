@@ -161,12 +161,18 @@ Example response:
 
 ```json
 [
-  "{\"messageType\":\"USER\",\"text\":\"Say hello in one sentence.\"}",
-  "{\"messageType\":\"ASSISTANT\",\"text\":\"Hello from the assistant.\"}"
+  {
+    "type": "USER",
+    "message": "Say hello in one sentence."
+  },
+  {
+    "type": "ASSISTANT",
+    "message": "Hello from the assistant."
+  }
 ]
 ```
 
-This endpoint currently returns the raw `content` values stored in Spring AI chat memory as strings.
+This endpoint returns structured messages from Spring AI chat memory in chronological order.
 
 ## Conversation workflow
 

@@ -79,12 +79,15 @@ public class ConversationService {
         return trimmed.length() <= 60 ? trimmed : trimmed.substring(0, 60) + "...";
     }
 
-    public List<String> getMessages(String conversationId) {
+    public List<ConversationMessageDto> getMessages(String conversationId) {
         return jdbcTemplate.query("""
-            SELECT content
+            SELECT type, content
             FROM SPRING_AI_CHAT_MEMORY
             WHERE conversation_id = ?
             ORDER BY timestamp ASC
-        """, (rs, rowNum) -> rs.getString("content"), conversationId);
+        """, (rs, rowNum) -> new ConversationMessageDto(
+            rs.getString("type"),
+            rs.getString("content")
+        ), conversationId);
     }
 }
