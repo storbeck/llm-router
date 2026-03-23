@@ -1,4 +1,4 @@
-package dev.pagefoundry.llm_router;
+package dev.pagefoundry.llm_router.chat;
 
 public record ChatRequest(
     String message,

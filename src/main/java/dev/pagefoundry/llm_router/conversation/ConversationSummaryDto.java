@@ -1,4 +1,4 @@
-package dev.pagefoundry.llm_router;
+package dev.pagefoundry.llm_router.conversation;
 
 import java.time.LocalDateTime;
 

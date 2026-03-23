@@ -1,4 +1,4 @@
-package dev.pagefoundry.llm_router;
+package dev.pagefoundry.llm_router.config;
 
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.memory.MessageWindowChatMemory;

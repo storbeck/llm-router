@@ -1,4 +1,4 @@
-package dev.pagefoundry.llm_router;
+package dev.pagefoundry.llm_router.provider;
 
 import java.util.Map;
 import java.util.Optional;

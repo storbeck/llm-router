@@ -1,12 +1,10 @@
-package dev.pagefoundry.llm_router;
+package dev.pagefoundry.llm_router.conversation;
 
 import java.time.LocalDateTime;
 
 public record Conversation(
     String id,
     String title,
-    String provider,
-    String model,
     LocalDateTime createdAt,
     LocalDateTime updatedAt
 ) {}
