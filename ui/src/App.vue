@@ -103,28 +103,52 @@
 
           <v-divider />
 
-          <div class="chat-pane">
-            <ChatMessages
-              :default-model="DEFAULT_MODEL"
-              :default-provider="DEFAULT_PROVIDER"
-              :error="chatError"
-              :loading="isLoadingMessages"
-              :messages="messages"
-              :sending="isSending"
+          <div
+            ref="workspaceRef"
+            class="workspace"
+          >
+            <EditorPanel
+              class="workspace__panel workspace__panel--editor"
+              :style="{ width: `${editorWidthPercent}%` }"
             />
 
-            <v-divider />
-
-            <ChatComposer
-              v-model:draft="draft"
-              v-model:model="selectedModel"
-              v-model:provider="selectedProvider"
-              :model-options="availableModels"
-              :provider-options="PROVIDER_OPTIONS"
-              :selected-conversation-id="selectedConversationId"
-              :sending="isSending"
-              @send="sendMessage"
+            <div
+              class="workspace__divider"
+              :class="{ 'workspace__divider--dragging': isDraggingDivider }"
+              aria-label="Resize editor and chat panels"
+              role="separator"
+              tabindex="0"
+              @keydown.left.prevent="resizeByKeyboard(-5)"
+              @keydown.right.prevent="resizeByKeyboard(5)"
+              @pointerdown="startDividerDrag"
             />
+
+            <div
+              class="chat-pane workspace__panel workspace__panel--chat"
+              :style="{ width: `${100 - editorWidthPercent}%` }"
+            >
+              <ChatMessages
+                :default-model="DEFAULT_MODEL"
+                :default-provider="DEFAULT_PROVIDER"
+                :error="chatError"
+                :loading="isLoadingMessages"
+                :messages="messages"
+                :sending="isSending"
+              />
+
+              <v-divider />
+
+              <ChatComposer
+                v-model:draft="draft"
+                v-model:model="selectedModel"
+                v-model:provider="selectedProvider"
+                :model-options="availableModels"
+                :provider-options="PROVIDER_OPTIONS"
+                :selected-conversation-id="selectedConversationId"
+                :sending="isSending"
+                @send="sendMessage"
+              />
+            </div>
           </div>
         </v-card>
       </v-container>
@@ -136,6 +160,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import ChatComposer from '@/components/ChatComposer.vue'
 import ChatMessages from '@/components/ChatMessages.vue'
+import EditorPanel from '@/components/EditorPanel.vue'
 import type {
   ChatResponse,
   ConversationMessage,
@@ -163,9 +188,55 @@ const isLoadingMessages = ref(false)
 const isSending = ref(false)
 const sidebarError = ref('')
 const chatError = ref('')
+const workspaceRef = ref<HTMLElement | null>(null)
+const editorWidthPercent = ref(42)
+const isDraggingDivider = ref(false)
 
 function getConversationIdFromLocation() {
   return window.location.pathname.replace(/^\/+|\/+$/g, '')
+}
+
+function clampEditorWidth(value: number) {
+  return Math.min(70, Math.max(30, value))
+}
+
+function updateEditorWidth(clientX: number) {
+  if (!workspaceRef.value) {
+    return
+  }
+
+  const bounds = workspaceRef.value.getBoundingClientRect()
+  if (!bounds.width) {
+    return
+  }
+
+  const nextWidth = ((clientX - bounds.left) / bounds.width) * 100
+  editorWidthPercent.value = clampEditorWidth(nextWidth)
+}
+
+function handleDividerDrag(event: PointerEvent) {
+  updateEditorWidth(event.clientX)
+}
+
+function stopDividerDrag() {
+  isDraggingDivider.value = false
+  window.removeEventListener('pointermove', handleDividerDrag)
+  window.removeEventListener('pointerup', stopDividerDrag)
+}
+
+function startDividerDrag(event: PointerEvent) {
+  if (window.innerWidth <= 720) {
+    return
+  }
+
+  isDraggingDivider.value = true
+  updateEditorWidth(event.clientX)
+  window.addEventListener('pointermove', handleDividerDrag)
+  window.addEventListener('pointerup', stopDividerDrag)
+}
+
+function resizeByKeyboard(delta: number) {
+  editorWidthPercent.value = clampEditorWidth(editorWidthPercent.value + delta)
 }
 
 const availableModels = computed(() => PROVIDER_MODELS[selectedProvider.value] ?? [])
@@ -375,6 +446,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  stopDividerDrag()
   window.removeEventListener('popstate', syncFromLocation)
 })
 </script>
@@ -419,10 +491,65 @@ onBeforeUnmount(() => {
 
 .chat-pane {
   display: flex;
-  flex: 1 1 auto;
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
+}
+
+.workspace {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.workspace__panel {
+  flex: 0 0 auto;
+  min-height: 0;
+}
+
+.workspace__panel--chat {
+  min-width: 360px;
+}
+
+.workspace__divider {
+  position: relative;
+  flex: 0 0 12px;
+  cursor: col-resize;
+  background: transparent;
+}
+
+.workspace__divider::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: rgba(var(--v-border-color), var(--v-border-opacity));
+}
+
+.workspace__divider::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 4px;
+  height: 48px;
+  border-radius: 999px;
+  transform: translate(-50%, -50%);
+  background: rgba(var(--v-theme-on-surface), 0.22);
+}
+
+.workspace__divider:hover::after,
+.workspace__divider:focus-visible::after,
+.workspace__divider--dragging::after {
+  background: rgba(var(--v-theme-primary), 0.7);
+}
+
+.workspace__divider:focus-visible {
+  outline: none;
 }
 
 .history-menu__loading {
@@ -445,6 +572,20 @@ onBeforeUnmount(() => {
 
   .app-toolbar__actions {
     align-self: flex-end;
+  }
+
+  .workspace {
+    flex-direction: column;
+  }
+
+  .workspace__panel,
+  .workspace__panel--chat {
+    width: 100% !important;
+    min-width: 0;
+  }
+
+  .workspace__divider {
+    display: none;
   }
 }
 </style>
