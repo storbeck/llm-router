@@ -8,7 +8,10 @@ import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.retry.NonTransientAiException;
 import org.springframework.stereotype.Service;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 import dev.pagefoundry.llm_router.conversation.ConversationMessageMetadataDto;
 import dev.pagefoundry.llm_router.conversation.ConversationMessageTokenUsageDto;
@@ -41,8 +44,13 @@ public class ChatService {
         String conversationId = request.conversationId();
         if (conversationId == null || conversationId.isBlank()) {
             conversationId = conversationService.createConversation(request.message());
-        } else {
+        } else if (conversationService.findById(conversationId).isPresent()) {
             conversationService.touchConversation(conversationId);
+        } else {
+            throw new ResponseStatusException(
+                HttpStatus.NOT_FOUND,
+                "Conversation not found: " + conversationId
+            );
         }
         final String finalConversationId = conversationId;
         LocalDateTime promptedAt = LocalDateTime.now();
@@ -63,11 +71,20 @@ public class ChatService {
             )
             .build();
 
-        ChatResponse response = chatClient.prompt()
-            .user(request.message())
-            .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, finalConversationId))
-            .call()
-            .chatResponse();
+        ChatResponse response;
+        try {
+            response = chatClient.prompt()
+                .user(request.message())
+                .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, finalConversationId))
+                .call()
+                .chatResponse();
+        } catch (NonTransientAiException exception) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                exception.getMessage(),
+                exception
+            );
+        }
 
         String message = response.getResult().getOutput().getText();
         Usage usage = response.getMetadata().getUsage();

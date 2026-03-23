@@ -75,7 +75,7 @@ Request body:
 {
   "message": "Say hello in one sentence.",
   "provider": "openai",
-  "model": "gpt-4o-mini",
+  "model": "gpt-5.4-mini",
   "conversationId": "optional-existing-conversation-id"
 }
 ```
@@ -95,7 +95,7 @@ curl -X POST http://localhost:8080/api/chat \
   -d '{
     "message": "Say hello in one sentence.",
     "provider": "openai",
-    "model": "gpt-4o-mini",
+    "model": "gpt-5.4-mini",
     "conversationId": "optional-existing-conversation-id"
   }'
 ```
@@ -135,7 +135,7 @@ Example response:
     "id": "b4f1ca08-0f57-4b1f-a67d-6cc7b42b7f8b",
     "title": "Say hello in one sentence.",
     "provider": "openai",
-    "model": "gpt-4o-mini",
+    "model": "gpt-5.4-mini",
     "updatedAt": "2026-03-22T14:35:12.123"
   }
 ]

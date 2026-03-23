@@ -144,11 +144,11 @@ import type {
 } from '@/components/chat-types'
 
 const DEFAULT_PROVIDER = 'openai'
-const DEFAULT_MODEL = 'gpt-4o-mini'
+const DEFAULT_MODEL = 'gpt-5.4-mini'
 const PROVIDER_MODELS: Record<string, string[]> = {
-  openai: ['gpt-4o-mini', 'gpt-4.1-mini', 'gpt-4o'],
+  openai: ['gpt-5.4-mini', 'gpt-5.4', 'gpt-5.4-nano'],
   anthropic: ['claude-3-5-sonnet-latest'],
-  ollama: ['llama3.2', 'mistral'],
+  ollama: ['llama3.2:latest', 'mistral:latest'],
 }
 const PROVIDER_OPTIONS = Object.keys(PROVIDER_MODELS)
 

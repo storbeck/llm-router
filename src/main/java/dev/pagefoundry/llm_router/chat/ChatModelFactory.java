@@ -1,6 +1,9 @@
 package dev.pagefoundry.llm_router.chat;
 
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.ollama.OllamaChatModel;
+import org.springframework.ai.ollama.api.OllamaApi;
+import org.springframework.ai.ollama.api.OllamaChatOptions;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.openai.api.OpenAiApi;
@@ -40,6 +43,19 @@ public class ChatModelFactory {
     }
 
     private ChatModel createOllama(String model, String baseUrl) {
-        throw new UnsupportedOperationException("Ollama not implemented yet");
+        OllamaApi.Builder apiBuilder = OllamaApi.builder();
+
+        if (baseUrl != null && !baseUrl.isBlank()) {
+            apiBuilder.baseUrl(baseUrl);
+        }
+
+        OllamaChatOptions options = OllamaChatOptions.builder()
+            .model(model)
+            .build();
+
+        return OllamaChatModel.builder()
+            .ollamaApi(apiBuilder.build())
+            .defaultOptions(options)
+            .build();
     }
 }
