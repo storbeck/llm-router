@@ -57,9 +57,10 @@
                 </template>
               </div>
             </div>
-            <div class="message-bubble__text">
-              {{ message.text }}
-            </div>
+            <div
+              class="message-bubble__text"
+              v-html="renderMarkdown(message.text)"
+            />
           </div>
         </div>
 
@@ -83,6 +84,8 @@
 </template>
 
 <script lang="ts" setup>
+import DOMPurify from 'dompurify'
+import { marked } from 'marked'
 import { nextTick, onMounted, ref, watch } from 'vue'
 import type { UiMessage } from './chat-types'
 
@@ -96,6 +99,15 @@ const props = defineProps<{
 }>()
 
 const messageViewport = ref<HTMLElement | null>(null)
+
+function renderMarkdown(text: string) {
+  return DOMPurify.sanitize(
+    marked.parse(text, {
+      breaks: true,
+      gfm: true,
+    }) as string,
+  )
+}
 
 async function scrollToBottom() {
   await nextTick()
@@ -194,8 +206,54 @@ onMounted(async () => {
 }
 
 .message-bubble__text {
-  white-space: pre-wrap;
   line-height: 1.6;
+}
+
+.message-bubble__text :deep(p) {
+  margin: 0;
+}
+
+.message-bubble__text :deep(p + p),
+.message-bubble__text :deep(p + ul),
+.message-bubble__text :deep(p + ol),
+.message-bubble__text :deep(p + pre),
+.message-bubble__text :deep(ul + p),
+.message-bubble__text :deep(ol + p),
+.message-bubble__text :deep(pre + p) {
+  margin-top: 0.75rem;
+}
+
+.message-bubble__text :deep(ul),
+.message-bubble__text :deep(ol) {
+  margin: 0.75rem 0 0;
+  padding-left: 1.25rem;
+}
+
+.message-bubble__text :deep(li + li) {
+  margin-top: 0.25rem;
+}
+
+.message-bubble__text :deep(pre) {
+  margin: 0.75rem 0 0;
+  overflow-x: auto;
+  padding: 0.875rem 1rem;
+  border-radius: 12px;
+  background: rgba(var(--v-theme-on-surface), 0.06);
+}
+
+.message-bubble__text :deep(code) {
+  font-family: 'Roboto Mono', monospace;
+  font-size: 0.92em;
+}
+
+.message-bubble__text :deep(:not(pre) > code) {
+  padding: 0.15rem 0.35rem;
+  border-radius: 6px;
+  background: rgba(var(--v-theme-on-surface), 0.06);
+}
+
+.message-bubble__text :deep(a) {
+  color: rgb(var(--v-theme-primary));
 }
 
 @media (max-width: 900px) {
