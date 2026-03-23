@@ -7,6 +7,18 @@
           variant="flat"
         >
           <header class="app-toolbar">
+            <div class="app-toolbar__start">
+              <v-btn
+                color="primary"
+                prepend-icon="mdi-play"
+                size="small"
+                variant="flat"
+                @click="runEditorQuery"
+              >
+                Run
+              </v-btn>
+            </div>
+
             <div class="app-toolbar__actions">
               <v-btn
                 icon="mdi-plus"
@@ -109,6 +121,7 @@
           >
             <EditorPanel
               class="workspace__panel workspace__panel--editor"
+              :run-request-id="runRequestId"
               :style="{ width: `${editorWidthPercent}%` }"
             />
 
@@ -189,8 +202,9 @@ const isSending = ref(false)
 const sidebarError = ref('')
 const chatError = ref('')
 const workspaceRef = ref<HTMLElement | null>(null)
-const editorWidthPercent = ref(42)
+const editorWidthPercent = ref(60)
 const isDraggingDivider = ref(false)
+const runRequestId = ref(0)
 
 function getConversationIdFromLocation() {
   return window.location.pathname.replace(/^\/+|\/+$/g, '')
@@ -237,6 +251,10 @@ function startDividerDrag(event: PointerEvent) {
 
 function resizeByKeyboard(delta: number) {
   editorWidthPercent.value = clampEditorWidth(editorWidthPercent.value + delta)
+}
+
+function runEditorQuery() {
+  runRequestId.value += 1
 }
 
 const availableModels = computed(() => PROVIDER_MODELS[selectedProvider.value] ?? [])
@@ -478,8 +496,13 @@ onBeforeUnmount(() => {
   align-items: center;
   display: flex;
   gap: 16px;
-  justify-content: flex-end;
+  justify-content: space-between;
   padding: 12px 20px;
+}
+
+.app-toolbar__start {
+  display: flex;
+  flex: 0 0 auto;
 }
 
 .app-toolbar__actions {
@@ -568,6 +591,10 @@ onBeforeUnmount(() => {
     align-items: flex-start;
     flex-direction: column;
     padding-inline: 12px;
+  }
+
+  .app-toolbar__start {
+    width: 100%;
   }
 
   .app-toolbar__actions {
