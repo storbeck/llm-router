@@ -8,9 +8,10 @@ import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.ai.retry.NonTransientAiException;
-import org.springframework.stereotype.Service;
 import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 import dev.pagefoundry.llm_router.conversation.ConversationMessageMetadataDto;
@@ -22,6 +23,7 @@ import dev.pagefoundry.llm_router.provider.ProviderCredentialService;
 
 @Service
 public class ChatService {
+    private static final String QUERY_LANGUAGE = "sql";
 
     private final ChatModelFactory chatModelFactory;
     private final ProviderCredentialService providerCredentialService;
@@ -71,10 +73,29 @@ public class ChatService {
             )
             .build();
 
+        BeanOutputConverter<SqlAssistantResponse> outputConverter =
+            new BeanOutputConverter<>(SqlAssistantResponse.class);
+
+        String prompt = """
+            You are a SQL assistant.
+
+            User request:
+            %s
+
+            Requirements:
+            - explanation: plain English explanation for a human
+            - sqlQuery: valid SQL query only
+            - No markdown fences
+            - Do not include commentary inside sqlQuery
+            - If assumptions are needed, put them in explanation
+
+            %s
+            """.formatted(request.message(), outputConverter.getFormat());
+
         ChatResponse response;
         try {
             response = chatClient.prompt()
-                .user(request.message())
+                .user(prompt)
                 .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, finalConversationId))
                 .call()
                 .chatResponse();
@@ -86,7 +107,10 @@ public class ChatService {
             );
         }
 
-        String message = response.getResult().getOutput().getText();
+        SqlAssistantResponse assistantResponse =
+            outputConverter.convert(response.getResult().getOutput().getText());
+        validateResponse(assistantResponse);
+
         Usage usage = response.getMetadata().getUsage();
         Integer promptTokens = usage != null ? usage.getPromptTokens() : null;
         Integer completionTokens = usage != null ? usage.getCompletionTokens() : null;
@@ -94,12 +118,12 @@ public class ChatService {
 
         conversationService.saveMessageEntry(
             finalConversationId,
-            null,
+            QUERY_LANGUAGE,
             request.message(),
             promptedAt,
             new MessageEntryResponseDto(
-                null,
-                message,
+                assistantResponse.sqlQuery(),
+                assistantResponse.explanation(),
                 new ConversationMessageMetadataDto(
                     request.provider(),
                     request.model(),
@@ -114,11 +138,26 @@ public class ChatService {
         conversationService.touchConversation(finalConversationId);
 
         return new ChatResponseDto(
-            message,
+            assistantResponse.explanation(),
+            assistantResponse.sqlQuery(),
             request.provider(),
             request.model(),
             promptTokens,
             completionTokens
         );
+    }
+
+    private void validateResponse(SqlAssistantResponse response) {
+        if (response.explanation() == null || response.explanation().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Missing explanation in model response");
+        }
+
+        if (response.sqlQuery() == null || response.sqlQuery().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Missing SQL query in model response");
+        }
+
+        if (response.sqlQuery().contains("```")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "SQL query must not contain markdown fences");
+        }
     }
 }

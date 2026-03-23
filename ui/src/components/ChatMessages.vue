@@ -54,6 +54,14 @@
               class="message-bubble__text"
               v-html="renderMarkdown(message.text)"
             />
+
+            <div
+              v-if="message.role === 'assistant' && message.query"
+              class="message-bubble__query"
+            >
+              <div class="message-bubble__query-label">SQL</div>
+              <pre class="message-bubble__query-block"><code v-html="renderSql(message.query)" /></pre>
+            </div>
           </div>
         </div>
 
@@ -78,6 +86,9 @@
 
 <script lang="ts" setup>
 import DOMPurify from 'dompurify'
+import hljs from 'highlight.js/lib/core'
+import sql from 'highlight.js/lib/languages/sql'
+import 'highlight.js/styles/github.css'
 import { marked } from 'marked'
 import { nextTick, onMounted, ref, watch } from 'vue'
 import type { UiMessage } from './chat-types'
@@ -93,6 +104,8 @@ const props = defineProps<{
 
 const messageViewport = ref<HTMLElement | null>(null)
 
+hljs.registerLanguage('sql', sql)
+
 function renderMarkdown(text: string) {
   return DOMPurify.sanitize(
     marked.parse(text, {
@@ -100,6 +113,10 @@ function renderMarkdown(text: string) {
       gfm: true,
     }) as string,
   )
+}
+
+function renderSql(query: string) {
+  return DOMPurify.sanitize(hljs.highlight(query, { language: 'sql' }).value)
 }
 
 async function scrollToBottom() {
@@ -199,6 +216,34 @@ onMounted(async () => {
 }
 
 .message-bubble__text {
+  line-height: 1.6;
+}
+
+.message-bubble__query {
+  margin-top: 0.9rem;
+}
+
+.message-bubble__query-label {
+  margin-bottom: 0.35rem;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.message-bubble__query-block {
+  margin: 0;
+  overflow-x: auto;
+  padding: 0.875rem 1rem;
+  border-radius: 12px;
+  background: rgba(var(--v-theme-on-surface), 0.06);
+}
+
+.message-bubble__query-block code {
+  display: block;
+  font-family: 'Roboto Mono', monospace;
+  font-size: 0.9rem;
   line-height: 1.6;
 }
 

@@ -293,6 +293,7 @@ function normalizeMessage(message: ConversationMessage, index: number): UiMessag
     id: `${message.type}-${index}-${message.message}`,
     role: message.type === 'ASSISTANT' ? 'assistant' : 'user',
     text: message.message,
+    query: message.query,
     metadata: message.metadata,
   }
 }
@@ -400,7 +401,8 @@ async function sendMessage() {
       {
         id: `assistant-${Date.now()}`,
         role: 'assistant',
-        text: data.message,
+        text: data.explanation,
+        query: data.query,
         metadata: {
           provider: data.provider,
           model: data.model,

@@ -1,7 +1,8 @@
 package dev.pagefoundry.llm_router.chat;
 
 public record ChatResponseDto(
-    String message,
+    String explanation,
+    String query,
     String provider,
     String model,
     Integer promptTokens,

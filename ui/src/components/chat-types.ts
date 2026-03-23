@@ -20,11 +20,13 @@ export interface MessageMetadata {
 export interface ConversationMessage {
   type: 'USER' | 'ASSISTANT'
   message: string
+  query: string | null
   metadata: MessageMetadata | null
 }
 
 export interface ChatResponse {
-  message: string
+  explanation: string
+  query: string
   provider: string
   model: string
   promptTokens: number | null
@@ -35,5 +37,6 @@ export interface UiMessage {
   id: string
   role: 'user' | 'assistant'
   text: string
+  query?: string | null
   metadata: MessageMetadata | null
 }

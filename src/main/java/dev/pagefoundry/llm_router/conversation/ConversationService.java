@@ -160,6 +160,7 @@ public class ConversationService {
             messages.add(new ConversationMessageDto(
                 "USER",
                 row.prompt(),
+                null,
                 metadata
             ));
 
@@ -167,6 +168,7 @@ public class ConversationService {
                 messages.add(new ConversationMessageDto(
                     "ASSISTANT",
                     response.explanation(),
+                    response.query(),
                     metadata
                 ));
             }
