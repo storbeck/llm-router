@@ -5,6 +5,27 @@
   >
     <v-container class="py-4">
       <v-form @submit.prevent="$emit('send')">
+        <div
+          v-if="ontologyFileName"
+          class="composer-ontology"
+        >
+          <v-chip
+            color="primary"
+            size="small"
+            variant="tonal"
+          >
+            Ontology: {{ ontologyFileName }}
+          </v-chip>
+
+          <v-btn
+            size="x-small"
+            variant="text"
+            @click="$emit('clear:ontology')"
+          >
+            Clear
+          </v-btn>
+        </div>
+
         <v-textarea
           :model-value="draft"
           auto-grow
@@ -48,6 +69,7 @@ defineProps<{
   draft: string
   model: string
   modelOptions: string[]
+  ontologyFileName: string
   provider: string
   providerOptions: string[]
   selectedConversationId: string
@@ -56,6 +78,7 @@ defineProps<{
 
 defineEmits<{
   send: []
+  'clear:ontology': []
   'update:draft': [value: string]
   'update:model': [value: string]
   'update:provider': [value: string]
@@ -80,6 +103,13 @@ defineEmits<{
   gap: 12px;
   grid-template-columns: 180px minmax(220px, 320px);
   margin-top: 20px;
+}
+
+.composer-ontology {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
 }
 
 .composer-input {

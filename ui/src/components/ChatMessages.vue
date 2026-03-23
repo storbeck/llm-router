@@ -56,11 +56,11 @@
             />
 
             <div
-              v-if="message.role === 'assistant' && message.query"
+              v-if="message.role === 'assistant' && hasRenderableQuery(message.query)"
               class="message-bubble__query"
             >
               <div class="message-bubble__query-label">SQL</div>
-              <pre class="message-bubble__query-block"><code v-html="renderSql(message.query)" /></pre>
+              <pre class="message-bubble__query-block"><code v-html="renderSql(message.query ?? '')" /></pre>
             </div>
           </div>
         </div>
@@ -117,6 +117,10 @@ function renderMarkdown(text: string) {
 
 function renderSql(query: string) {
   return DOMPurify.sanitize(hljs.highlight(query, { language: 'sql' }).value)
+}
+
+function hasRenderableQuery(query?: string | null) {
+  return !!query?.trim()
 }
 
 async function scrollToBottom() {

@@ -6,6 +6,14 @@
           class="app-frame"
           variant="flat"
         >
+          <input
+            ref="ontologyInputRef"
+            accept=".ttl,text/turtle"
+            class="app-hidden-input"
+            type="file"
+            @change="handleOntologySelected"
+          >
+
           <header class="app-toolbar">
             <div class="app-toolbar__start">
               <v-btn
@@ -105,8 +113,9 @@
                     title="Notifications"
                   />
                   <v-list-item
-                    prepend-icon="mdi-shield-crown-outline"
-                    title="Workspace policy"
+                    prepend-icon="mdi-graph-outline"
+                    title="Load Ontology"
+                    @click="openOntologyPicker"
                   />
                 </v-list>
               </v-menu>
@@ -156,9 +165,11 @@
                 v-model:model="selectedModel"
                 v-model:provider="selectedProvider"
                 :model-options="availableModels"
+                :ontology-file-name="ontologyFileName"
                 :provider-options="PROVIDER_OPTIONS"
                 :selected-conversation-id="selectedConversationId"
                 :sending="isSending"
+                @clear:ontology="clearOntology"
                 @send="sendMessage"
               />
             </div>
@@ -205,6 +216,10 @@ const workspaceRef = ref<HTMLElement | null>(null)
 const editorWidthPercent = ref(60)
 const isDraggingDivider = ref(false)
 const runRequestId = ref(0)
+const ontologyInputRef = ref<HTMLInputElement | null>(null)
+const ontologyFileName = ref('')
+const ontologyContent = ref('')
+const ONTOLOGY_STORAGE_KEY = 'llm-router-ontology'
 
 function getConversationIdFromLocation() {
   return window.location.pathname.replace(/^\/+|\/+$/g, '')
@@ -255,6 +270,43 @@ function resizeByKeyboard(delta: number) {
 
 function runEditorQuery() {
   runRequestId.value += 1
+}
+
+function openOntologyPicker() {
+  ontologyInputRef.value?.click()
+}
+
+function persistOntology() {
+  if (!ontologyContent.value) {
+    window.localStorage.removeItem(ONTOLOGY_STORAGE_KEY)
+    return
+  }
+
+  window.localStorage.setItem(ONTOLOGY_STORAGE_KEY, JSON.stringify({
+    fileName: ontologyFileName.value,
+    content: ontologyContent.value,
+  }))
+}
+
+function clearOntology() {
+  ontologyFileName.value = ''
+  ontologyContent.value = ''
+  if (ontologyInputRef.value) {
+    ontologyInputRef.value.value = ''
+  }
+  persistOntology()
+}
+
+async function handleOntologySelected(event: Event) {
+  const input = event.target as HTMLInputElement | null
+  const file = input?.files?.[0]
+  if (!file) {
+    return
+  }
+
+  ontologyFileName.value = file.name
+  ontologyContent.value = await file.text()
+  persistOntology()
 }
 
 const availableModels = computed(() => PROVIDER_MODELS[selectedProvider.value] ?? [])
@@ -391,6 +443,7 @@ async function sendMessage() {
         provider: selectedProvider.value,
         model: selectedModel.value,
         conversationId: requestedConversationId || null,
+        ontology: ontologyContent.value || null,
       }),
     })
 
@@ -456,6 +509,17 @@ async function syncFromLocation() {
 }
 
 onMounted(async () => {
+  const storedOntology = window.localStorage.getItem(ONTOLOGY_STORAGE_KEY)
+  if (storedOntology) {
+    try {
+      const parsed = JSON.parse(storedOntology) as { fileName?: string, content?: string }
+      ontologyFileName.value = parsed.fileName ?? ''
+      ontologyContent.value = parsed.content ?? ''
+    } catch {
+      window.localStorage.removeItem(ONTOLOGY_STORAGE_KEY)
+    }
+  }
+
   selectedConversationId.value = getConversationIdFromLocation()
   await loadConversations()
   if (selectedConversationId.value) {
@@ -512,6 +576,10 @@ onBeforeUnmount(() => {
   display: flex;
   flex: 0 0 auto;
   gap: 4px;
+}
+
+.app-hidden-input {
+  display: none;
 }
 
 .chat-pane {

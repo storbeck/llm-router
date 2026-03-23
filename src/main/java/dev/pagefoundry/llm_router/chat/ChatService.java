@@ -76,10 +76,19 @@ public class ChatService {
         BeanOutputConverter<SqlAssistantResponse> outputConverter =
             new BeanOutputConverter<>(SqlAssistantResponse.class);
 
-        String prompt = """
+        String ontologySection = "No ontology reference data was provided.";
+        if (request.ontology() != null && !request.ontology().isBlank()) {
+            ontologySection = """
+                %s
+                """.formatted(
+                    request.ontology()
+                );
+        }
+
+        String systemPrompt = """
             You are a SQL assistant.
 
-            User request:
+            Use the ontology reference data below to ground every answer.
             %s
 
             Requirements:
@@ -88,14 +97,18 @@ public class ChatService {
             - No markdown fences
             - Do not include commentary inside sqlQuery
             - If assumptions are needed, put them in explanation
+            - Use only entities, attributes, and relationships that are supported by the ontology reference data
+            - If the request cannot be grounded in the ontology reference data, say that clearly in explanation
+            - If the request cannot be grounded in the ontology reference data, sqlQuery must be an empty string
 
             %s
-            """.formatted(request.message(), outputConverter.getFormat());
+            """.formatted(ontologySection, outputConverter.getFormat());
 
         ChatResponse response;
         try {
             response = chatClient.prompt()
-                .user(prompt)
+                .system(systemPrompt)
+                .user(request.message())
                 .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, finalConversationId))
                 .call()
                 .chatResponse();
@@ -152,11 +165,11 @@ public class ChatService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Missing explanation in model response");
         }
 
-        if (response.sqlQuery() == null || response.sqlQuery().isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Missing SQL query in model response");
+        if (response.sqlQuery() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Missing SQL query field in model response");
         }
 
-        if (response.sqlQuery().contains("```")) {
+        if (!response.sqlQuery().isBlank() && response.sqlQuery().contains("```")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "SQL query must not contain markdown fences");
         }
     }

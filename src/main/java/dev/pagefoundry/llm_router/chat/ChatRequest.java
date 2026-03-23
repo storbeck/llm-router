@@ -4,5 +4,6 @@ public record ChatRequest(
     String message,
     String provider,
     String model,
-    String conversationId
+    String conversationId,
+    String ontology
 ) {}
