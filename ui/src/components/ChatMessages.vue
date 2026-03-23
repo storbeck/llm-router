@@ -61,6 +61,22 @@
             >
               <div class="message-bubble__query-label">SQL</div>
               <pre class="message-bubble__query-block"><code v-html="renderSql(message.query ?? '')" /></pre>
+              <div class="message-bubble__query-actions">
+                <v-btn
+                  size="small"
+                  variant="tonal"
+                  @click="$emit('apply-query', message.query ?? '', false)"
+                >
+                  Apply
+                </v-btn>
+                <v-btn
+                  size="small"
+                  variant="flat"
+                  @click="$emit('apply-query', message.query ?? '', true)"
+                >
+                  Apply &amp; Run
+                </v-btn>
+              </div>
             </div>
           </div>
         </div>
@@ -100,6 +116,10 @@ const props = defineProps<{
   loading: boolean
   messages: UiMessage[]
   sending: boolean
+}>()
+
+defineEmits<{
+  'apply-query': [query: string, runAfterApply: boolean]
 }>()
 
 const messageViewport = ref<HTMLElement | null>(null)
@@ -249,6 +269,12 @@ onMounted(async () => {
   font-family: 'Roboto Mono', monospace;
   font-size: 0.9rem;
   line-height: 1.6;
+}
+
+.message-bubble__query-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 0.75rem;
 }
 
 .message-bubble__text :deep(p) {

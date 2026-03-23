@@ -96,6 +96,9 @@ import 'codemirror/mode/sql/sql.js'
 import { nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 
 const props = defineProps<{
+  applyQuery: string
+  applyRunAfter: boolean
+  applyRequestId: number
   runRequestId: number
 }>()
 
@@ -195,11 +198,34 @@ function closeResults() {
   refreshEditor()
 }
 
+async function applyQuery(query: string, runAfterApply: boolean) {
+  if (!editor.value) {
+    return
+  }
+
+  editor.value.setValue(query)
+  editor.value.focus()
+  refreshEditor()
+
+  if (runAfterApply) {
+    await runQuery()
+  }
+}
+
 watch(
   () => props.runRequestId,
   (runRequestId) => {
     if (runRequestId > 0) {
       void runQuery()
+    }
+  },
+)
+
+watch(
+  () => props.applyRequestId,
+  (applyRequestId) => {
+    if (applyRequestId > 0 && props.applyQuery.trim()) {
+      void applyQuery(props.applyQuery, props.applyRunAfter)
     }
   },
 )

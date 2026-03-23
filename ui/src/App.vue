@@ -129,6 +129,9 @@
             class="workspace"
           >
             <EditorPanel
+              :apply-query="appliedQuery"
+              :apply-run-after="applyRunAfter"
+              :apply-request-id="applyRequestId"
               class="workspace__panel workspace__panel--editor"
               :run-request-id="runRequestId"
               :style="{ width: `${editorWidthPercent}%` }"
@@ -150,6 +153,7 @@
               :style="{ width: `${100 - editorWidthPercent}%` }"
             >
               <ChatMessages
+                @apply-query="handleApplyQuery"
                 :default-model="DEFAULT_MODEL"
                 :default-provider="DEFAULT_PROVIDER"
                 :error="chatError"
@@ -216,6 +220,9 @@ const workspaceRef = ref<HTMLElement | null>(null)
 const editorWidthPercent = ref(60)
 const isDraggingDivider = ref(false)
 const runRequestId = ref(0)
+const applyRequestId = ref(0)
+const appliedQuery = ref('')
+const applyRunAfter = ref(false)
 const ontologyInputRef = ref<HTMLInputElement | null>(null)
 const ontologyFileName = ref('')
 const ontologyContent = ref('')
@@ -270,6 +277,12 @@ function resizeByKeyboard(delta: number) {
 
 function runEditorQuery() {
   runRequestId.value += 1
+}
+
+function handleApplyQuery(query: string, runAfterApply: boolean) {
+  appliedQuery.value = query
+  applyRunAfter.value = runAfterApply
+  applyRequestId.value += 1
 }
 
 function openOntologyPicker() {
