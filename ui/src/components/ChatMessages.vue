@@ -26,13 +26,6 @@
       </div>
 
       <div
-        v-else-if="messages.length === 0"
-        class="text-body-1 text-medium-emphasis pt-8"
-      >
-        Start a new conversation or select one from the left.
-      </div>
-
-      <div
         v-else
         class="message-log"
       >
