@@ -16,11 +16,12 @@
 
           <header class="app-toolbar">
             <div class="app-toolbar__start">
+              <span>Mermaid Playground</span>
               <v-btn
                 color="primary"
-                prepend-icon="mdi-play"
+                prepend-icon="mdi-play-circle"
                 size="small"
-                variant="flat"
+                variant="outlined"
                 @click="runEditorQuery"
               >
                 Run
@@ -587,6 +588,9 @@ onBeforeUnmount(() => {
 .app-toolbar__start {
   display: flex;
   flex: 0 0 auto;
+  gap: 16px;
+  justify-content: center;
+  align-items: center;
 }
 
 .app-toolbar__actions {

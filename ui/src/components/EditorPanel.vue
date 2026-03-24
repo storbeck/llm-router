@@ -39,9 +39,6 @@
       v-if="resultsVisible"
       class="editor-panel__results"
       :style="{ flexBasis: `${resultsHeightPercent}%` }"
-      border="t"
-      rounded="0"
-      tile
     >
       <v-toolbar
         density="compact"
@@ -59,7 +56,7 @@
       <div class="editor-panel__preview-wrap">
         <v-alert
           v-if="renderError"
-          class="ma-4"
+          class="ma-4 editor-panel__preview-error"
           density="comfortable"
           type="error"
           variant="tonal"
@@ -68,9 +65,9 @@
         </v-alert>
 
         <div
-          v-else
           ref="previewRoot"
           class="editor-panel__preview"
+          :class="{ 'editor-panel__preview--hidden': !!renderError }"
         />
       </div>
     </v-sheet>
@@ -175,6 +172,7 @@ async function renderDiagram() {
   }
 
   try {
+    renderError.value = ''
     const { svg } = await mermaid.render(`mermaid-preview-${currentRender}`, source)
     if (currentRender !== renderSequence.value || !previewRoot.value) {
       return
@@ -301,12 +299,6 @@ onMounted(() => {
       tabSize: 2,
     })
 
-    editor.value.on('change', () => {
-      if (resultsVisible.value) {
-        void renderDiagram()
-      }
-    })
-
     editor.value.setSize('100%', '100%')
     refreshEditor()
   } catch (error) {
@@ -395,18 +387,21 @@ onBeforeUnmount(() => {
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
-  padding: 16px;
-  background:
-    radial-gradient(circle at top left, rgba(var(--v-theme-primary), 0.08), transparent 40%),
-    linear-gradient(180deg, rgba(var(--v-theme-on-surface), 0.02), rgba(var(--v-theme-on-surface), 0.04));
 }
 
 .editor-panel__preview {
   min-height: 100%;
   padding: 16px;
   border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
-  border-radius: 16px;
   background: rgb(var(--v-theme-surface));
+}
+
+.editor-panel__preview--hidden {
+  display: none;
+}
+
+.editor-panel__preview-error {
+  flex: 0 0 auto;
 }
 
 .editor-panel__preview :deep(svg) {
