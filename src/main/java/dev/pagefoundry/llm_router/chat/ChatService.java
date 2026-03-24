@@ -1,6 +1,8 @@
 package dev.pagefoundry.llm_router.chat;
 
 import java.time.LocalDateTime;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
@@ -24,6 +26,11 @@ import dev.pagefoundry.llm_router.provider.ProviderCredentialService;
 @Service
 public class ChatService {
     private static final String QUERY_LANGUAGE = "mermaid";
+    private static final int MAX_CONTEXT_CHARACTERS = 60_000;
+    private static final Pattern EXPLANATION_PATTERN =
+        Pattern.compile("\"explanation\"\\s*:\\s*\"(.*?)\"", Pattern.DOTALL);
+    private static final Pattern MERMAID_QUERY_PATTERN =
+        Pattern.compile("\"mermaidQuery\"\\s*:\\s*\"(.*?)\"", Pattern.DOTALL);
 
     private final ChatModelFactory chatModelFactory;
     private final ProviderCredentialService providerCredentialService;
@@ -83,7 +90,7 @@ public class ChatService {
             contextSection = """
                 %s
                 """.formatted(
-                    request.context()
+                    truncateContext(request.context())
                 );
         }
 
@@ -107,6 +114,13 @@ public class ChatService {
             - If reference context conflicts with the request or is unrelated, follow the user's request and mention the mismatch briefly in explanation
             - When context is missing or incomplete, make reasonable assumptions and state them in explanation
             - mermaidQuery should still be non-empty whenever a reasonable diagram can be produced from the request alone
+            - Output exactly one Mermaid diagram type
+            - Prefer flowcharts for general process or how-to requests
+            - For flowcharts, use valid flowchart syntax only
+            - For flowcharts, use arrows like -->, --- or -.-> and never sequence-diagram arrows like ->> or -->> 
+            - For flowcharts, define nodes with stable identifiers like A[Start] and put each statement on its own line
+            - Do a final syntax check before returning mermaidQuery
+            - Prefer top down instead of left to right orientation for flowcharts, unless the request explicitly suggests otherwise
 
             %s
             """.formatted(contextSection, outputConverter.getFormat());
@@ -128,7 +142,11 @@ public class ChatService {
         }
 
         MermaidAssistantResponse assistantResponse =
-            outputConverter.convert(response.getResult().getOutput().getText());
+            parseAssistantResponse(outputConverter, response.getResult().getOutput().getText());
+        assistantResponse = new MermaidAssistantResponse(
+            assistantResponse.explanation(),
+            normalizeMermaidQuery(assistantResponse.mermaidQuery())
+        );
         validateResponse(assistantResponse);
 
         Usage usage = response.getMetadata().getUsage();
@@ -177,8 +195,100 @@ public class ChatService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Missing Mermaid query field in model response");
         }
 
-        if (!response.mermaidQuery().isBlank() && response.mermaidQuery().contains("```")) {
+        if (response.mermaidQuery().isBlank()) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_GATEWAY,
+                "Model did not return a Mermaid query."
+            );
+        }
+
+        if (response.mermaidQuery().contains("```")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Mermaid query must not contain markdown fences");
         }
+    }
+
+    private MermaidAssistantResponse parseAssistantResponse(
+        BeanOutputConverter<MermaidAssistantResponse> outputConverter,
+        String rawOutput
+    ) {
+        try {
+            return outputConverter.convert(rawOutput);
+        } catch (RuntimeException exception) {
+            MermaidAssistantResponse extractedResponse = extractStructuredFields(rawOutput);
+            if (extractedResponse != null) {
+                return extractedResponse;
+            }
+
+            throw new ResponseStatusException(
+                HttpStatus.BAD_GATEWAY,
+                "Model returned an unstructured response without a Mermaid query.",
+                exception
+            );
+        }
+    }
+
+    private MermaidAssistantResponse extractStructuredFields(String rawOutput) {
+        if (rawOutput == null || rawOutput.isBlank()) {
+            return null;
+        }
+
+        String explanation = extractField(rawOutput, EXPLANATION_PATTERN);
+        String mermaidQuery = extractField(rawOutput, MERMAID_QUERY_PATTERN);
+        if (explanation == null || mermaidQuery == null) {
+            return null;
+        }
+
+        return new MermaidAssistantResponse(explanation, mermaidQuery);
+    }
+
+    private String extractField(String rawOutput, Pattern pattern) {
+        Matcher matcher = pattern.matcher(rawOutput);
+        if (!matcher.find()) {
+            return null;
+        }
+
+        return matcher.group(1)
+            .replace("\\n", "\n")
+            .replace("\\r", "\r")
+            .replace("\\t", "\t")
+            .replace("\\\"", "\"")
+            .replace("\\\\", "\\")
+            .trim();
+    }
+
+    private String truncateContext(String context) {
+        String trimmed = context.trim();
+        if (trimmed.length() <= MAX_CONTEXT_CHARACTERS) {
+            return trimmed;
+        }
+
+        return """
+            %s
+
+            [...context truncated for size...]
+
+            %s
+            """.formatted(
+            trimmed.substring(0, 40_000).trim(),
+            trimmed.substring(trimmed.length() - 20_000).trim()
+        );
+    }
+
+    private String normalizeMermaidQuery(String mermaidQuery) {
+        if (mermaidQuery == null) {
+            return null;
+        }
+
+        String normalized = mermaidQuery.trim();
+        normalized = normalized.replace("```mermaid", "").replace("```", "").trim();
+
+        if (normalized.startsWith("graph ") || normalized.startsWith("flowchart ")) {
+            normalized = normalized
+                .replace("->>", "-->")
+                .replace("-->>", "-->")
+                .replaceAll(";\\s*", ";\n");
+        }
+
+        return normalized;
     }
 }

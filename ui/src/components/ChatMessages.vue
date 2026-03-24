@@ -88,9 +88,6 @@
           <div class="message-bubble">
             <div class="message-bubble__header">
               <div class="message-bubble__author">Assistant</div>
-              <div class="message-bubble__meta">
-                {{ defaultProvider }} / {{ defaultModel }}
-              </div>
             </div>
             <div class="message-bubble__text">Waiting for model response...</div>
           </div>
@@ -110,8 +107,6 @@ import { nextTick, onMounted, ref, watch } from 'vue'
 import type { UiMessage } from './chat-types'
 
 const props = defineProps<{
-  defaultModel: string
-  defaultProvider: string
   error: string
   loading: boolean
   messages: UiMessage[]

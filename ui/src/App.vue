@@ -110,10 +110,6 @@
                     title="Preferences"
                   />
                   <v-list-item
-                    prepend-icon="mdi-bell-outline"
-                    title="Notifications"
-                  />
-                  <v-list-item
                     prepend-icon="mdi-graph-outline"
                     title="Load Context File"
                     @click="openContextPicker"
@@ -156,8 +152,6 @@
             >
               <ChatMessages
                 @apply-query="handleApplyQuery"
-                :default-model="DEFAULT_MODEL"
-                :default-provider="DEFAULT_PROVIDER"
                 :error="chatError"
                 :loading="isLoadingMessages"
                 :messages="messages"
@@ -171,11 +165,13 @@
                 v-model:model="selectedModel"
                 v-model:provider="selectedProvider"
                 :context-file-name="contextFileName"
+                :context-notice="contextNotice"
                 :model-options="availableModels"
                 :provider-options="PROVIDER_OPTIONS"
                 :selected-conversation-id="selectedConversationId"
                 :sending="isSending"
                 @clear:context="clearContext"
+                @drop:context="handleContextDropped"
                 @send="sendMessage"
               />
             </div>
@@ -229,7 +225,35 @@ const applyRunAfter = ref(false)
 const contextInputRef = ref<HTMLInputElement | null>(null)
 const contextFileName = ref('')
 const contextContent = ref('')
+const contextNotice = ref('')
 const CONTEXT_STORAGE_KEY = 'llm-router-context'
+const MODEL_SELECTION_STORAGE_KEY = 'llm-router-model-selection'
+const MAX_CONTEXT_CHARACTERS = 60_000
+
+function formatContextNotice(originalLength: number, truncatedLength: number) {
+  return `Context was trimmed from ${originalLength.toLocaleString()} to ${truncatedLength.toLocaleString()} characters before sending.`
+}
+
+function truncateContext(content: string) {
+  const trimmed = content.trim()
+  if (trimmed.length <= MAX_CONTEXT_CHARACTERS) {
+    return {
+      content: trimmed,
+      notice: '',
+    }
+  }
+
+  const truncatedContent = [
+    trimmed.slice(0, 40_000).trimEnd(),
+    '[...context truncated for size...]',
+    trimmed.slice(-20_000).trimStart(),
+  ].join('\n\n')
+
+  return {
+    content: truncatedContent,
+    notice: formatContextNotice(trimmed.length, truncatedContent.length),
+  }
+}
 
 function getConversationIdFromLocation() {
   return window.location.pathname.replace(/^\/+|\/+$/g, '')
@@ -301,15 +325,29 @@ function persistContext() {
   window.localStorage.setItem(CONTEXT_STORAGE_KEY, JSON.stringify({
     fileName: contextFileName.value,
     content: contextContent.value,
+    notice: contextNotice.value,
   }))
 }
 
 function clearContext() {
   contextFileName.value = ''
   contextContent.value = ''
+  contextNotice.value = ''
   if (contextInputRef.value) {
     contextInputRef.value.value = ''
   }
+  persistContext()
+}
+
+async function loadContextFile(file: File) {
+  chatError.value = ''
+
+  const rawContent = await file.text()
+  const normalizedContext = truncateContext(rawContent)
+
+  contextFileName.value = file.name
+  contextContent.value = normalizedContext.content
+  contextNotice.value = normalizedContext.notice
   persistContext()
 }
 
@@ -320,9 +358,58 @@ async function handleContextSelected(event: Event) {
     return
   }
 
-  contextFileName.value = file.name
-  contextContent.value = await file.text()
-  persistContext()
+  try {
+    await loadContextFile(file)
+  } catch (error) {
+    clearContext()
+    chatError.value = error instanceof Error
+      ? `Unable to load context file: ${error.message}`
+      : 'Unable to load context file.'
+  }
+}
+
+async function handleContextDropped(file: File) {
+  try {
+    await loadContextFile(file)
+  } catch (error) {
+    clearContext()
+    chatError.value = error instanceof Error
+      ? `Unable to load context file: ${error.message}`
+      : 'Unable to load context file.'
+  }
+}
+
+function persistModelSelection() {
+  window.localStorage.setItem(MODEL_SELECTION_STORAGE_KEY, JSON.stringify({
+    provider: selectedProvider.value,
+    model: selectedModel.value,
+  }))
+}
+
+function applyStoredModelSelection() {
+  const storedSelection = window.localStorage.getItem(MODEL_SELECTION_STORAGE_KEY)
+  if (!storedSelection) {
+    selectedProvider.value = DEFAULT_PROVIDER
+    selectedModel.value = DEFAULT_MODEL
+    return
+  }
+
+  try {
+    const parsed = JSON.parse(storedSelection) as { provider?: string, model?: string }
+    if (parsed.provider && PROVIDER_OPTIONS.includes(parsed.provider)) {
+      selectedProvider.value = parsed.provider
+      const providerModels = PROVIDER_MODELS[parsed.provider] ?? []
+      selectedModel.value = parsed.model && providerModels.includes(parsed.model)
+        ? parsed.model
+        : providerModels[0] ?? DEFAULT_MODEL
+      return
+    }
+  } catch {
+    window.localStorage.removeItem(MODEL_SELECTION_STORAGE_KEY)
+  }
+
+  selectedProvider.value = DEFAULT_PROVIDER
+  selectedModel.value = DEFAULT_MODEL
 }
 
 const availableModels = computed(() => PROVIDER_MODELS[selectedProvider.value] ?? [])
@@ -332,6 +419,10 @@ watch(selectedProvider, (provider) => {
   if (!models.includes(selectedModel.value)) {
     selectedModel.value = models[0] ?? ''
   }
+})
+
+watch([selectedProvider, selectedModel], () => {
+  persistModelSelection()
 })
 
 async function readJson<T>(response: Response): Promise<T> {
@@ -413,8 +504,7 @@ async function selectConversation(conversationId = '') {
   setBrowserPath(conversationId)
 
   if (!conversationId) {
-    selectedProvider.value = DEFAULT_PROVIDER
-    selectedModel.value = DEFAULT_MODEL
+    applyStoredModelSelection()
     chatError.value = ''
     messages.value = []
     return
@@ -528,12 +618,15 @@ async function syncFromLocation() {
 }
 
 onMounted(async () => {
+  applyStoredModelSelection()
+
   const storedContext = window.localStorage.getItem(CONTEXT_STORAGE_KEY)
   if (storedContext) {
     try {
-      const parsed = JSON.parse(storedContext) as { fileName?: string, content?: string }
+      const parsed = JSON.parse(storedContext) as { fileName?: string, content?: string, notice?: string }
       contextFileName.value = parsed.fileName ?? ''
       contextContent.value = parsed.content ?? ''
+      contextNotice.value = parsed.notice ?? ''
     } catch {
       window.localStorage.removeItem(CONTEXT_STORAGE_KEY)
     }
