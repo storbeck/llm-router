@@ -7,11 +7,11 @@
           variant="flat"
         >
           <input
-            ref="ontologyInputRef"
-            accept=".ttl,text/turtle"
+            ref="contextInputRef"
+            accept=".txt,.md,.json,.yaml,.yml,.xml,.csv,.ttl,.rdf,.jsonld,.js,.ts,.py,.java,.kt,.go,.rs,.c,.cpp,.h,.hpp,.html,.css,.scss,.vue,text/plain,application/json,text/markdown,text/csv,text/x-java-source"
             class="app-hidden-input"
             type="file"
-            @change="handleOntologySelected"
+            @change="handleContextSelected"
           >
 
           <header class="app-toolbar">
@@ -114,8 +114,8 @@
                   />
                   <v-list-item
                     prepend-icon="mdi-graph-outline"
-                    title="Load Ontology"
-                    @click="openOntologyPicker"
+                    title="Load Context File"
+                    @click="openContextPicker"
                   />
                 </v-list>
               </v-menu>
@@ -133,6 +133,7 @@
               :apply-run-after="applyRunAfter"
               :apply-request-id="applyRequestId"
               class="workspace__panel workspace__panel--editor"
+              :reset-request-id="resetRequestId"
               :run-request-id="runRequestId"
               :style="{ width: `${editorWidthPercent}%` }"
             />
@@ -168,12 +169,12 @@
                 v-model:draft="draft"
                 v-model:model="selectedModel"
                 v-model:provider="selectedProvider"
+                :context-file-name="contextFileName"
                 :model-options="availableModels"
-                :ontology-file-name="ontologyFileName"
                 :provider-options="PROVIDER_OPTIONS"
                 :selected-conversation-id="selectedConversationId"
                 :sending="isSending"
-                @clear:ontology="clearOntology"
+                @clear:context="clearContext"
                 @send="sendMessage"
               />
             </div>
@@ -221,12 +222,13 @@ const editorWidthPercent = ref(60)
 const isDraggingDivider = ref(false)
 const runRequestId = ref(0)
 const applyRequestId = ref(0)
+const resetRequestId = ref(0)
 const appliedQuery = ref('')
 const applyRunAfter = ref(false)
-const ontologyInputRef = ref<HTMLInputElement | null>(null)
-const ontologyFileName = ref('')
-const ontologyContent = ref('')
-const ONTOLOGY_STORAGE_KEY = 'llm-router-ontology'
+const contextInputRef = ref<HTMLInputElement | null>(null)
+const contextFileName = ref('')
+const contextContent = ref('')
+const CONTEXT_STORAGE_KEY = 'llm-router-context'
 
 function getConversationIdFromLocation() {
   return window.location.pathname.replace(/^\/+|\/+$/g, '')
@@ -285,41 +287,41 @@ function handleApplyQuery(query: string, runAfterApply: boolean) {
   applyRequestId.value += 1
 }
 
-function openOntologyPicker() {
-  ontologyInputRef.value?.click()
+function openContextPicker() {
+  contextInputRef.value?.click()
 }
 
-function persistOntology() {
-  if (!ontologyContent.value) {
-    window.localStorage.removeItem(ONTOLOGY_STORAGE_KEY)
+function persistContext() {
+  if (!contextContent.value) {
+    window.localStorage.removeItem(CONTEXT_STORAGE_KEY)
     return
   }
 
-  window.localStorage.setItem(ONTOLOGY_STORAGE_KEY, JSON.stringify({
-    fileName: ontologyFileName.value,
-    content: ontologyContent.value,
+  window.localStorage.setItem(CONTEXT_STORAGE_KEY, JSON.stringify({
+    fileName: contextFileName.value,
+    content: contextContent.value,
   }))
 }
 
-function clearOntology() {
-  ontologyFileName.value = ''
-  ontologyContent.value = ''
-  if (ontologyInputRef.value) {
-    ontologyInputRef.value.value = ''
+function clearContext() {
+  contextFileName.value = ''
+  contextContent.value = ''
+  if (contextInputRef.value) {
+    contextInputRef.value.value = ''
   }
-  persistOntology()
+  persistContext()
 }
 
-async function handleOntologySelected(event: Event) {
+async function handleContextSelected(event: Event) {
   const input = event.target as HTMLInputElement | null
   const file = input?.files?.[0]
   if (!file) {
     return
   }
 
-  ontologyFileName.value = file.name
-  ontologyContent.value = await file.text()
-  persistOntology()
+  contextFileName.value = file.name
+  contextContent.value = await file.text()
+  persistContext()
 }
 
 const availableModels = computed(() => PROVIDER_MODELS[selectedProvider.value] ?? [])
@@ -359,6 +361,7 @@ function normalizeMessage(message: ConversationMessage, index: number): UiMessag
     role: message.type === 'ASSISTANT' ? 'assistant' : 'user',
     text: message.message,
     query: message.query,
+    queryLanguage: message.queryLanguage ?? 'mermaid',
     metadata: message.metadata,
   }
 }
@@ -421,6 +424,7 @@ async function selectConversation(conversationId = '') {
 
 async function startNewConversation() {
   await selectConversation('')
+  resetRequestId.value += 1
 }
 
 async function sendMessage() {
@@ -456,7 +460,7 @@ async function sendMessage() {
         provider: selectedProvider.value,
         model: selectedModel.value,
         conversationId: requestedConversationId || null,
-        ontology: ontologyContent.value || null,
+        context: contextContent.value || null,
       }),
     })
 
@@ -469,6 +473,7 @@ async function sendMessage() {
         role: 'assistant',
         text: data.explanation,
         query: data.query,
+        queryLanguage: data.queryLanguage ?? 'mermaid',
         metadata: {
           provider: data.provider,
           model: data.model,
@@ -522,14 +527,14 @@ async function syncFromLocation() {
 }
 
 onMounted(async () => {
-  const storedOntology = window.localStorage.getItem(ONTOLOGY_STORAGE_KEY)
-  if (storedOntology) {
+  const storedContext = window.localStorage.getItem(CONTEXT_STORAGE_KEY)
+  if (storedContext) {
     try {
-      const parsed = JSON.parse(storedOntology) as { fileName?: string, content?: string }
-      ontologyFileName.value = parsed.fileName ?? ''
-      ontologyContent.value = parsed.content ?? ''
+      const parsed = JSON.parse(storedContext) as { fileName?: string, content?: string }
+      contextFileName.value = parsed.fileName ?? ''
+      contextContent.value = parsed.content ?? ''
     } catch {
-      window.localStorage.removeItem(ONTOLOGY_STORAGE_KEY)
+      window.localStorage.removeItem(CONTEXT_STORAGE_KEY)
     }
   }
 

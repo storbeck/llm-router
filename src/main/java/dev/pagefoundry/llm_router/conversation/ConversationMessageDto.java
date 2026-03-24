@@ -4,5 +4,6 @@ public record ConversationMessageDto(
     String type,
     String message,
     String query,
+    String queryLanguage,
     ConversationMessageMetadataDto metadata
 ) {}

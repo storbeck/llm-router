@@ -141,13 +141,14 @@ public class ConversationService {
 
     public List<ConversationMessageDto> getMessages(String conversationId) {
         List<MessageEntryRow> rows = jdbcTemplate.query("""
-            SELECT prompt, response
+            SELECT prompt, response, query_language
             FROM message_entry
             WHERE conversation_id = ?
             ORDER BY prompted_at ASC, id ASC
         """, (rs, rowNum) -> new MessageEntryRow(
             rs.getString("prompt"),
-            rs.getString("response")
+            rs.getString("response"),
+            rs.getString("query_language")
         ), conversationId);
 
         List<ConversationMessageDto> messages = new ArrayList<>();
@@ -161,6 +162,7 @@ public class ConversationService {
                 "USER",
                 row.prompt(),
                 null,
+                null,
                 metadata
             ));
 
@@ -169,6 +171,7 @@ public class ConversationService {
                     "ASSISTANT",
                     response.explanation(),
                     response.query(),
+                    row.queryLanguage(),
                     metadata
                 ));
             }
@@ -211,6 +214,7 @@ public class ConversationService {
 
     private record MessageEntryRow(
         String prompt,
-        String responseJson
+        String responseJson,
+        String queryLanguage
     ) {}
 }

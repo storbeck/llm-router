@@ -59,8 +59,8 @@
               v-if="message.role === 'assistant' && hasRenderableQuery(message.query)"
               class="message-bubble__query"
             >
-              <div class="message-bubble__query-label">SQL</div>
-              <pre class="message-bubble__query-block"><code v-html="renderSql(message.query ?? '')" /></pre>
+              <div class="message-bubble__query-label">Mermaid</div>
+              <pre class="message-bubble__query-block"><code v-html="renderMermaid(message.query ?? '')" /></pre>
               <div class="message-bubble__query-actions">
                 <v-btn
                   size="small"
@@ -103,7 +103,7 @@
 <script lang="ts" setup>
 import DOMPurify from 'dompurify'
 import hljs from 'highlight.js/lib/core'
-import sql from 'highlight.js/lib/languages/sql'
+import plaintext from 'highlight.js/lib/languages/plaintext'
 import 'highlight.js/styles/github.css'
 import { marked } from 'marked'
 import { nextTick, onMounted, ref, watch } from 'vue'
@@ -124,7 +124,7 @@ defineEmits<{
 
 const messageViewport = ref<HTMLElement | null>(null)
 
-hljs.registerLanguage('sql', sql)
+hljs.registerLanguage('plaintext', plaintext)
 
 function renderMarkdown(text: string) {
   return DOMPurify.sanitize(
@@ -135,8 +135,8 @@ function renderMarkdown(text: string) {
   )
 }
 
-function renderSql(query: string) {
-  return DOMPurify.sanitize(hljs.highlight(query, { language: 'sql' }).value)
+function renderMermaid(query: string) {
+  return DOMPurify.sanitize(hljs.highlight(query, { language: 'plaintext' }).value)
 }
 
 function hasRenderableQuery(query?: string | null) {

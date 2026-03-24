@@ -21,12 +21,14 @@ export interface ConversationMessage {
   type: 'USER' | 'ASSISTANT'
   message: string
   query: string | null
+  queryLanguage?: string | null
   metadata: MessageMetadata | null
 }
 
 export interface ChatResponse {
   explanation: string
   query: string
+  queryLanguage?: string | null
   provider: string
   model: string
   promptTokens: number | null
@@ -38,5 +40,6 @@ export interface UiMessage {
   role: 'user' | 'assistant'
   text: string
   query?: string | null
+  queryLanguage?: string | null
   metadata: MessageMetadata | null
 }

@@ -23,7 +23,7 @@ import dev.pagefoundry.llm_router.provider.ProviderCredentialService;
 
 @Service
 public class ChatService {
-    private static final String QUERY_LANGUAGE = "sql";
+    private static final String QUERY_LANGUAGE = "mermaid";
 
     private final ChatModelFactory chatModelFactory;
     private final ProviderCredentialService providerCredentialService;
@@ -73,36 +73,43 @@ public class ChatService {
             )
             .build();
 
-        BeanOutputConverter<SqlAssistantResponse> outputConverter =
-            new BeanOutputConverter<>(SqlAssistantResponse.class);
+        BeanOutputConverter<MermaidAssistantResponse> outputConverter =
+            new BeanOutputConverter<>(MermaidAssistantResponse.class);
 
-        String ontologySection = "No ontology reference data was provided.";
-        if (request.ontology() != null && !request.ontology().isBlank()) {
-            ontologySection = """
+        String contextSection = """
+            No reference context was provided. Build the diagram directly from the user's request.
+            """;
+        if (request.context() != null && !request.context().isBlank()) {
+            contextSection = """
                 %s
                 """.formatted(
-                    request.ontology()
+                    request.context()
                 );
         }
 
         String systemPrompt = """
-            You are a SQL assistant.
+            You are a Mermaid diagram assistant.
 
-            Use the ontology reference data below to ground every answer.
+            Your primary job is to produce a beautiful, valid Mermaid diagram that satisfies the user's request.
+            Use the optional reference context below as supporting material. Treat it as additional content that can
+            refine names, attributes, and relationships when relevant, but do not let it block diagram creation.
             %s
 
             Requirements:
             - explanation: plain English explanation for a human
-            - sqlQuery: valid SQL query only
+            - mermaidQuery: valid Mermaid diagram source only
             - No markdown fences
-            - Do not include commentary inside sqlQuery
+            - Do not include commentary inside mermaidQuery
             - If assumptions are needed, put them in explanation
-            - Use only entities, attributes, and relationships that are supported by the ontology reference data
-            - If the request cannot be grounded in the ontology reference data, say that clearly in explanation
-            - If the request cannot be grounded in the ontology reference data, sqlQuery must be an empty string
+            - Prefer concise diagrams that Mermaid can render directly
+            - Prioritize the user's requested subject matter and diagram quality over strict grounding
+            - If reference context is relevant, incorporate compatible details from it
+            - If reference context conflicts with the request or is unrelated, follow the user's request and mention the mismatch briefly in explanation
+            - When context is missing or incomplete, make reasonable assumptions and state them in explanation
+            - mermaidQuery should still be non-empty whenever a reasonable diagram can be produced from the request alone
 
             %s
-            """.formatted(ontologySection, outputConverter.getFormat());
+            """.formatted(contextSection, outputConverter.getFormat());
 
         ChatResponse response;
         try {
@@ -120,7 +127,7 @@ public class ChatService {
             );
         }
 
-        SqlAssistantResponse assistantResponse =
+        MermaidAssistantResponse assistantResponse =
             outputConverter.convert(response.getResult().getOutput().getText());
         validateResponse(assistantResponse);
 
@@ -135,7 +142,7 @@ public class ChatService {
             request.message(),
             promptedAt,
             new MessageEntryResponseDto(
-                assistantResponse.sqlQuery(),
+                assistantResponse.mermaidQuery(),
                 assistantResponse.explanation(),
                 new ConversationMessageMetadataDto(
                     request.provider(),
@@ -152,7 +159,8 @@ public class ChatService {
 
         return new ChatResponseDto(
             assistantResponse.explanation(),
-            assistantResponse.sqlQuery(),
+            assistantResponse.mermaidQuery(),
+            QUERY_LANGUAGE,
             request.provider(),
             request.model(),
             promptTokens,
@@ -160,17 +168,17 @@ public class ChatService {
         );
     }
 
-    private void validateResponse(SqlAssistantResponse response) {
+    private void validateResponse(MermaidAssistantResponse response) {
         if (response.explanation() == null || response.explanation().isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Missing explanation in model response");
         }
 
-        if (response.sqlQuery() == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Missing SQL query field in model response");
+        if (response.mermaidQuery() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Missing Mermaid query field in model response");
         }
 
-        if (!response.sqlQuery().isBlank() && response.sqlQuery().contains("```")) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "SQL query must not contain markdown fences");
+        if (!response.mermaidQuery().isBlank() && response.mermaidQuery().contains("```")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Mermaid query must not contain markdown fences");
         }
     }
 }

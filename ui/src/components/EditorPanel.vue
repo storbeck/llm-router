@@ -27,7 +27,7 @@
       v-if="resultsVisible"
       class="editor-panel__results-divider"
       :class="{ 'editor-panel__results-divider--dragging': isDraggingResults }"
-      aria-label="Resize query editor and results panel"
+      aria-label="Resize Mermaid editor and preview panel"
       role="separator"
       tabindex="0"
       @keydown.up.prevent="resizeResultsByKeyboard(5)"
@@ -47,9 +47,6 @@
         density="compact"
         flat
       >
-        <v-toolbar-title class="text-body-2 font-weight-medium">
-          Response
-        </v-toolbar-title>
         <v-spacer />
         <v-btn
           icon="mdi-close"
@@ -59,32 +56,23 @@
         />
       </v-toolbar>
 
-      <v-table
-        class="editor-panel__results-table"
-        density="compact"
-        fixed-header
-        height="100%"
-      >
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Name</th>
-              <th>Status</th>
-              <th>Notes</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="row in mockRows"
-              :key="row.id"
-            >
-              <td>{{ row.id }}</td>
-              <td>{{ row.name }}</td>
-              <td>{{ row.status }}</td>
-              <td>{{ row.notes }}</td>
-            </tr>
-          </tbody>
-      </v-table>
+      <div class="editor-panel__preview-wrap">
+        <v-alert
+          v-if="renderError"
+          class="ma-4"
+          density="comfortable"
+          type="error"
+          variant="tonal"
+        >
+          {{ renderError }}
+        </v-alert>
+
+        <div
+          v-else
+          ref="previewRoot"
+          class="editor-panel__preview"
+        />
+      </div>
     </v-sheet>
   </section>
 </template>
@@ -92,34 +80,30 @@
 <script lang="ts" setup>
 import CodeMirror from 'codemirror'
 import 'codemirror/lib/codemirror.css'
-import 'codemirror/mode/sql/sql.js'
+import 'codemirror/mode/markdown/markdown.js'
+import mermaid from 'mermaid'
 import { nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 
 const props = defineProps<{
   applyQuery: string
   applyRunAfter: boolean
   applyRequestId: number
+  resetRequestId: number
   runRequestId: number
 }>()
 
 const panelRoot = ref<HTMLElement | null>(null)
 const editorRoot = ref<HTMLElement | null>(null)
+const previewRoot = ref<HTMLElement | null>(null)
 const editor = shallowRef<CodeMirror.EditorFromTextArea | null>(null)
 const loadError = ref('')
+const renderError = ref('')
 const isRunning = ref(false)
 const resultsVisible = ref(false)
 const resultsHeightPercent = ref(34)
 const isDraggingResults = ref(false)
 const runTimeoutId = ref<number | null>(null)
-
-const initialValue = `SELECT 1 AS result;`
-
-const mockRows = [
-  { id: 'n-001', name: 'Lorem Node', status: 'active', notes: 'Lorem ipsum dolor sit amet' },
-  { id: 'n-002', name: 'Ipsum Edge', status: 'pending', notes: 'Consectetur adipiscing elit' },
-  { id: 'n-003', name: 'Dolor Path', status: 'archived', notes: 'Sed do eiusmod tempor' },
-  { id: 'n-004', name: 'Sit Query', status: 'active', notes: 'Incididunt ut labore et dolore' },
-]
+const renderSequence = ref(0)
 
 function refreshEditor() {
   requestAnimationFrame(() => {
@@ -135,7 +119,7 @@ function clearRunTimer() {
 }
 
 function clampResultsHeight(value: number) {
-  return Math.min(55, Math.max(20, value))
+  return Math.min(85, Math.max(20, value))
 }
 
 function updateResultsHeight(clientY: number) {
@@ -175,6 +159,39 @@ function resizeResultsByKeyboard(delta: number) {
   refreshEditor()
 }
 
+async function renderDiagram() {
+  if (!previewRoot.value || !editor.value) {
+    return
+  }
+
+  renderSequence.value += 1
+  const currentRender = renderSequence.value
+  const source = editor.value.getValue().trim()
+
+  if (!source) {
+    renderError.value = 'Enter Mermaid diagram source to render a preview.'
+    previewRoot.value.innerHTML = ''
+    return
+  }
+
+  try {
+    const { svg } = await mermaid.render(`mermaid-preview-${currentRender}`, source)
+    if (currentRender !== renderSequence.value || !previewRoot.value) {
+      return
+    }
+
+    renderError.value = ''
+    previewRoot.value.innerHTML = svg
+  } catch (error) {
+    if (currentRender !== renderSequence.value) {
+      return
+    }
+
+    previewRoot.value.innerHTML = ''
+    renderError.value = error instanceof Error ? error.message : 'Unable to render Mermaid diagram.'
+  }
+}
+
 async function runQuery() {
   if (isRunning.value) {
     return
@@ -188,13 +205,18 @@ async function runQuery() {
     isRunning.value = false
     clearRunTimer()
     await nextTick()
+    await renderDiagram()
     refreshEditor()
-  }, 450)
+  }, 80)
 }
 
 function closeResults() {
   resultsVisible.value = false
   stopResultsDrag()
+  renderError.value = ''
+  if (previewRoot.value) {
+    previewRoot.value.innerHTML = ''
+  }
   refreshEditor()
 }
 
@@ -210,6 +232,16 @@ async function applyQuery(query: string, runAfterApply: boolean) {
   if (runAfterApply) {
     await runQuery()
   }
+}
+
+function resetEditorPanel() {
+  clearRunTimer()
+  if (editor.value) {
+    editor.value.setValue('')
+  }
+  resultsHeightPercent.value = 34
+  closeResults()
+  editor.value?.focus()
 }
 
 watch(
@@ -230,21 +262,49 @@ watch(
   },
 )
 
+watch(
+  () => props.resetRequestId,
+  (resetRequestId) => {
+    if (resetRequestId > 0) {
+      resetEditorPanel()
+    }
+  },
+)
+
+watch(resultsVisible, async (visible) => {
+  if (visible) {
+    await nextTick()
+    await renderDiagram()
+  }
+})
+
 onMounted(() => {
   if (!editorRoot.value) {
     return
   }
 
+  mermaid.initialize({
+    startOnLoad: false,
+    securityLevel: 'loose',
+    theme: 'neutral',
+  })
+
   try {
     const input = document.createElement('textarea')
-    input.value = initialValue
+    input.value = ''
     editorRoot.value.appendChild(input)
 
     editor.value = CodeMirror.fromTextArea(input, {
       lineNumbers: true,
       lineWrapping: true,
-      mode: 'text/x-sql',
+      mode: 'text/x-markdown',
       tabSize: 2,
+    })
+
+    editor.value.on('change', () => {
+      if (resultsVisible.value) {
+        void renderDiagram()
+      }
     })
 
     editor.value.setSize('100%', '100%')
@@ -324,13 +384,36 @@ onBeforeUnmount(() => {
 }
 
 .editor-panel__results {
+  display: flex;
   flex: 0 0 auto;
+  flex-direction: column;
   min-height: 160px;
   overflow: hidden;
 }
 
-.editor-panel__results-table {
-  height: calc(100% - 48px);
+.editor-panel__preview-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+  background:
+    radial-gradient(circle at top left, rgba(var(--v-theme-primary), 0.08), transparent 40%),
+    linear-gradient(180deg, rgba(var(--v-theme-on-surface), 0.02), rgba(var(--v-theme-on-surface), 0.04));
+}
+
+.editor-panel__preview {
+  min-height: 100%;
+  padding: 16px;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  border-radius: 16px;
+  background: rgb(var(--v-theme-surface));
+}
+
+.editor-panel__preview :deep(svg) {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
 }
 
 .editor-panel--error {

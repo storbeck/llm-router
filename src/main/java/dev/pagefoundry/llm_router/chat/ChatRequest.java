@@ -5,5 +5,5 @@ public record ChatRequest(
     String provider,
     String model,
     String conversationId,
-    String ontology
+    String context
 ) {}

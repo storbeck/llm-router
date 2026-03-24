@@ -6,21 +6,21 @@
     <v-container class="py-4">
       <v-form @submit.prevent="$emit('send')">
         <div
-          v-if="ontologyFileName"
-          class="composer-ontology"
+          v-if="contextFileName"
+          class="composer-context"
         >
           <v-chip
             color="primary"
             size="small"
             variant="tonal"
           >
-            Ontology: {{ ontologyFileName }}
+            Context: {{ contextFileName }}
           </v-chip>
 
           <v-btn
             size="x-small"
             variant="text"
-            @click="$emit('clear:ontology')"
+            @click="$emit('clear:context')"
           >
             Clear
           </v-btn>
@@ -67,9 +67,9 @@
 <script lang="ts" setup>
 defineProps<{
   draft: string
+  contextFileName: string
   model: string
   modelOptions: string[]
-  ontologyFileName: string
   provider: string
   providerOptions: string[]
   selectedConversationId: string
@@ -78,7 +78,7 @@ defineProps<{
 
 defineEmits<{
   send: []
-  'clear:ontology': []
+  'clear:context': []
   'update:draft': [value: string]
   'update:model': [value: string]
   'update:provider': [value: string]
@@ -105,7 +105,7 @@ defineEmits<{
   margin-top: 20px;
 }
 
-.composer-ontology {
+.composer-context {
   display: flex;
   align-items: center;
   gap: 8px;
