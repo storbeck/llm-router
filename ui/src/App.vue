@@ -129,10 +129,12 @@
               :apply-query="appliedQuery"
               :apply-run-after="applyRunAfter"
               :apply-request-id="applyRequestId"
+              :auto-fixing="isAutoFixing"
               class="workspace__panel workspace__panel--editor"
               :reset-request-id="resetRequestId"
               :run-request-id="runRequestId"
               :style="{ width: `${editorWidthPercent}%` }"
+              @auto-fix="handleAutoFix"
             />
 
             <div
@@ -222,10 +224,12 @@ const applyRequestId = ref(0)
 const resetRequestId = ref(0)
 const appliedQuery = ref('')
 const applyRunAfter = ref(false)
+const appliedSourcePrompt = ref('')
 const contextInputRef = ref<HTMLInputElement | null>(null)
 const contextFileName = ref('')
 const contextContent = ref('')
 const contextNotice = ref('')
+const isAutoFixing = ref(false)
 const CONTEXT_STORAGE_KEY = 'llm-router-context'
 const MODEL_SELECTION_STORAGE_KEY = 'llm-router-model-selection'
 const MAX_CONTEXT_CHARACTERS = 60_000
@@ -306,8 +310,9 @@ function runEditorQuery() {
   runRequestId.value += 1
 }
 
-function handleApplyQuery(query: string, runAfterApply: boolean) {
+function handleApplyQuery(query: string, runAfterApply: boolean, sourcePrompt: string) {
   appliedQuery.value = query
+  appliedSourcePrompt.value = sourcePrompt
   applyRunAfter.value = runAfterApply
   applyRequestId.value += 1
 }
@@ -594,6 +599,102 @@ async function sendMessage() {
     chatError.value = error instanceof Error ? error.message : 'Unable to send message.'
   } finally {
     isSending.value = false
+  }
+}
+
+async function handleAutoFix(query: string, error: string) {
+  if (isAutoFixing.value) {
+    return
+  }
+
+  isAutoFixing.value = true
+  chatError.value = ''
+  let optimisticUserMessage: UiMessage | null = null
+
+  try {
+    const repairPrompt = [
+      'Repair this Mermaid diagram.',
+      '',
+      'Original user request:',
+      appliedSourcePrompt.value || '(not available)',
+      '',
+      'Current Mermaid query:',
+      query,
+      '',
+      'Render error:',
+      error,
+      '',
+      'Return a corrected Mermaid diagram with a short explanation.',
+    ].join('\n')
+
+    optimisticUserMessage = {
+      id: `user-fix-${Date.now()}`,
+      role: 'user',
+      text: repairPrompt,
+      metadata: {
+        provider: selectedProvider.value,
+        model: selectedModel.value,
+      },
+    }
+
+    messages.value = [...messages.value, optimisticUserMessage]
+    const requestedConversationId = selectedConversationId.value
+
+    const response = await fetch('/api/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        message: repairPrompt,
+        provider: selectedProvider.value,
+        model: selectedModel.value,
+        conversationId: selectedConversationId.value || null,
+        context: contextContent.value || null,
+      }),
+    })
+
+    const data = await readJson<ChatResponse>(response)
+    messages.value = [
+      ...messages.value,
+      {
+        id: `assistant-fix-${Date.now()}`,
+        role: 'assistant',
+        text: data.explanation,
+        query: data.query,
+        queryLanguage: data.queryLanguage ?? 'mermaid',
+        metadata: {
+          provider: data.provider,
+          model: data.model,
+          tokenUsage: {
+            input: data.promptTokens,
+            output: data.completionTokens,
+          },
+        },
+      },
+    ]
+
+    appliedQuery.value = data.query
+    applyRunAfter.value = true
+    applyRequestId.value += 1
+
+    await loadConversations()
+
+    const createdConversation = conversations.value[0] ?? null
+    const nextConversationId = requestedConversationId || createdConversation?.id || ''
+    if (!requestedConversationId && nextConversationId) {
+      selectedConversationId.value = nextConversationId
+      setBrowserPath(nextConversationId)
+    } else if (requestedConversationId) {
+      await loadMessages(requestedConversationId)
+    }
+  } catch (fixError) {
+    if (optimisticUserMessage) {
+      messages.value = messages.value.filter((message) => message.id !== optimisticUserMessage!.id)
+    }
+    chatError.value = fixError instanceof Error ? fixError.message : 'Unable to auto-fix Mermaid query.'
+  } finally {
+    isAutoFixing.value = false
   }
 }
 

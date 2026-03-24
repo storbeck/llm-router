@@ -62,6 +62,16 @@
           variant="tonal"
         >
           {{ renderError }}
+          <template #append>
+            <v-btn
+              size="small"
+              variant="text"
+              :loading="autoFixing"
+              @click="handleAutoFix"
+            >
+              Auto-Fix
+            </v-btn>
+          </template>
         </v-alert>
 
         <div
@@ -85,8 +95,13 @@ const props = defineProps<{
   applyQuery: string
   applyRunAfter: boolean
   applyRequestId: number
+  autoFixing: boolean
   resetRequestId: number
   runRequestId: number
+}>()
+
+const emit = defineEmits<{
+  'auto-fix': [query: string, error: string]
 }>()
 
 const panelRoot = ref<HTMLElement | null>(null)
@@ -216,6 +231,14 @@ function closeResults() {
     previewRoot.value.innerHTML = ''
   }
   refreshEditor()
+}
+
+function handleAutoFix() {
+  if (!editor.value || !renderError.value.trim()) {
+    return
+  }
+
+  emit('auto-fix', editor.value.getValue(), renderError.value)
 }
 
 async function applyQuery(query: string, runAfterApply: boolean) {

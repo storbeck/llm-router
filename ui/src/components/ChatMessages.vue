@@ -30,7 +30,7 @@
         class="message-log"
       >
         <div
-          v-for="message in messages"
+          v-for="(message, index) in messages"
           :key="message.id"
           class="message-row"
           :class="message.role === 'assistant' ? 'message-row--assistant' : 'message-row--user'"
@@ -65,14 +65,14 @@
                 <v-btn
                   size="small"
                   variant="tonal"
-                  @click="$emit('apply-query', message.query ?? '', false)"
+                  @click="$emit('apply-query', message.query ?? '', false, findSourcePrompt(index))"
                 >
                   Apply
                 </v-btn>
                 <v-btn
                   size="small"
                   variant="flat"
-                  @click="$emit('apply-query', message.query ?? '', true)"
+                  @click="$emit('apply-query', message.query ?? '', true, findSourcePrompt(index))"
                 >
                   Apply &amp; Run
                 </v-btn>
@@ -114,7 +114,7 @@ const props = defineProps<{
 }>()
 
 defineEmits<{
-  'apply-query': [query: string, runAfterApply: boolean]
+  'apply-query': [query: string, runAfterApply: boolean, sourcePrompt: string]
 }>()
 
 const messageViewport = ref<HTMLElement | null>(null)
@@ -136,6 +136,17 @@ function renderMermaid(query: string) {
 
 function hasRenderableQuery(query?: string | null) {
   return !!query?.trim()
+}
+
+function findSourcePrompt(index: number) {
+  for (let current = index - 1; current >= 0; current -= 1) {
+    const message = props.messages[current]
+    if (message?.role === 'user') {
+      return message.text
+    }
+  }
+
+  return ''
 }
 
 async function scrollToBottom() {

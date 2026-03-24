@@ -64,35 +64,9 @@ public class ChatService {
         final String finalConversationId = conversationId;
         LocalDateTime promptedAt = LocalDateTime.now();
 
-        ProviderConfig config =
-            providerCredentialService.getConfigForProvider(request.provider());
-
-        ChatModel chatModel = chatModelFactory.create(
-            request.provider(),
-            request.model(),
-            config.apiKey(),
-            config.baseUrl()
-        );
-
-        ChatClient chatClient = ChatClient.builder(chatModel)
-            .defaultAdvisors(
-                MessageChatMemoryAdvisor.builder(chatMemory).build()
-            )
-            .build();
-
+        ChatClient chatClient = createChatClient(request.provider(), request.model(), true);
         BeanOutputConverter<MermaidAssistantResponse> outputConverter =
             new BeanOutputConverter<>(MermaidAssistantResponse.class);
-
-        String contextSection = """
-            No reference context was provided. Build the diagram directly from the user's request.
-            """;
-        if (request.context() != null && !request.context().isBlank()) {
-            contextSection = """
-                %s
-                """.formatted(
-                    truncateContext(request.context())
-                );
-        }
 
         String systemPrompt = """
             You are a Mermaid diagram assistant.
@@ -117,35 +91,22 @@ public class ChatService {
             - Output exactly one Mermaid diagram type
             - Prefer flowcharts for general process or how-to requests
             - For flowcharts, use valid flowchart syntax only
-            - For flowcharts, use arrows like -->, --- or -.-> and never sequence-diagram arrows like ->> or -->> 
+            - For flowcharts, use arrows like -->, --- or -.-> and never sequence-diagram arrows like ->> or -->>
             - For flowcharts, define nodes with stable identifiers like A[Start] and put each statement on its own line
             - Do a final syntax check before returning mermaidQuery
             - Prefer top down instead of left to right orientation for flowcharts, unless the request explicitly suggests otherwise
 
             %s
-            """.formatted(contextSection, outputConverter.getFormat());
+            """.formatted(buildContextSection(request.context()), outputConverter.getFormat());
 
-        ChatResponse response;
-        try {
-            response = chatClient.prompt()
-                .system(systemPrompt)
-                .user(request.message())
-                .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, finalConversationId))
-                .call()
-                .chatResponse();
-        } catch (NonTransientAiException exception) {
-            throw new ResponseStatusException(
-                HttpStatus.BAD_REQUEST,
-                exception.getMessage(),
-                exception
-            );
-        }
-
-        MermaidAssistantResponse assistantResponse =
-            parseAssistantResponse(outputConverter, response.getResult().getOutput().getText());
-        assistantResponse = new MermaidAssistantResponse(
-            assistantResponse.explanation(),
-            normalizeMermaidQuery(assistantResponse.mermaidQuery())
+        ChatResponse response = callModel(chatClient, systemPrompt, request.message(), finalConversationId);
+        MermaidAssistantResponse parsedResponse = parseAssistantResponse(
+            outputConverter,
+            response.getResult().getOutput().getText()
+        );
+        MermaidAssistantResponse assistantResponse = new MermaidAssistantResponse(
+            parsedResponse.explanation(),
+            normalizeMermaidQuery(parsedResponse.mermaidQuery())
         );
         validateResponse(assistantResponse);
 
@@ -165,10 +126,7 @@ public class ChatService {
                 new ConversationMessageMetadataDto(
                     request.provider(),
                     request.model(),
-                    new ConversationMessageTokenUsageDto(
-                        promptTokens,
-                        completionTokens
-                    )
+                    new ConversationMessageTokenUsageDto(promptTokens, completionTokens)
                 )
             ),
             respondedAt
@@ -186,6 +144,48 @@ public class ChatService {
         );
     }
 
+    private ChatClient createChatClient(String provider, String model, boolean withMemory) {
+        ProviderConfig config = providerCredentialService.getConfigForProvider(provider);
+
+        ChatModel chatModel = chatModelFactory.create(
+            provider,
+            model,
+            config.apiKey(),
+            config.baseUrl()
+        );
+
+        ChatClient.Builder builder = ChatClient.builder(chatModel);
+        if (withMemory) {
+            builder.defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory).build());
+        }
+        return builder.build();
+    }
+
+    private ChatResponse callModel(
+        ChatClient chatClient,
+        String systemPrompt,
+        String userMessage,
+        String conversationId
+    ) {
+        try {
+            var promptCall = chatClient.prompt()
+                .system(systemPrompt)
+                .user(userMessage);
+
+            if (conversationId != null && !conversationId.isBlank()) {
+                promptCall = promptCall.advisors(a -> a.param(ChatMemory.CONVERSATION_ID, conversationId));
+            }
+
+            return promptCall.call().chatResponse();
+        } catch (NonTransientAiException exception) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                exception.getMessage(),
+                exception
+            );
+        }
+    }
+
     private void validateResponse(MermaidAssistantResponse response) {
         if (response.explanation() == null || response.explanation().isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Missing explanation in model response");
@@ -196,10 +196,7 @@ public class ChatService {
         }
 
         if (response.mermaidQuery().isBlank()) {
-            throw new ResponseStatusException(
-                HttpStatus.BAD_GATEWAY,
-                "Model did not return a Mermaid query."
-            );
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Model did not return a Mermaid query.");
         }
 
         if (response.mermaidQuery().contains("```")) {
@@ -254,6 +251,14 @@ public class ChatService {
             .replace("\\\"", "\"")
             .replace("\\\\", "\\")
             .trim();
+    }
+
+    private String buildContextSection(String context) {
+        if (context == null || context.isBlank()) {
+            return "No reference context was provided. Build the diagram directly from the user's request.";
+        }
+
+        return truncateContext(context);
     }
 
     private String truncateContext(String context) {
